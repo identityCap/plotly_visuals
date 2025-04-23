@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Plotly Visualizations</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        li {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            transition: background-color 0.2s;
+        }
+        li:hover {
+            background-color: #f0f0f0;
+        }
+        a {
+            color: #0366d6;
+            text-decoration: none;
+            display: block;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .date {
+            color: #666;
+            font-size: 0.8em;
+        }
+        .description {
+            margin-top: 5px;
+            color: #444;
+        }
+        .no-files {
+            color: #666;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <h1>My Plotly Visualizations</h1>
+    <p>Below is a list of all available Plotly visualizations:</p>
+    
+    <div id="file-list">
+        <p class="no-files">Loading visualizations...</p>
+    </div>
+
+    <script>
+        // Function to fetch repository contents
+        async function fetchRepoContents() {
+            const username = window.location.hostname.split('.')[0];
+            const repoName = window.location.pathname.split('/')[1];
+            const apiUrl = `https://api.github.com/repos/${username}/${repoName}/contents`;
+            
+            try {
+                const response = await fetch(apiUrl);
+                const data = await response.json();
+                
+                // Filter for HTML files only (excluding index.html)
+                const htmlFiles = data.filter(file => 
+                    file.name.endsWith('.html') && 
+                    file.name !== 'index.html'
+                );
+                
+                displayFiles(htmlFiles);
+            } catch (error) {
+                console.error('Error fetching repository contents:', error);
+                document.getElementById('file-list').innerHTML = 
+                    `<p class="no-files">Error loading visualizations. Please try again later.</p>`;
+            }
+        }
+        
+        // Function to display files in the list
+        function displayFiles(files) {
+            const fileListElement = document.getElementById('file-list');
+            
+            if (files.length === 0) {
+                fileListElement.innerHTML = `<p class="no-files">No visualizations found. Upload some HTML files to see them here!</p>`;
+                return;
+            }
+            
+            const fileListHTML = `
+                <ul>
+                    ${files.map(file => `
+                        <li>
+                            <a href="${file.name}" target="_blank">
+                                ${file.name.replace('.html', '')}
+                            </a>
+                        </li>
+                    `).join('')}
+                </ul>
+            `;
+            
+            fileListElement.innerHTML = fileListHTML;
+        }
+        
+        // Run when the page loads
+        window.onload = fetchRepoContents;
+    </script>
+</body>
+</html>
