@@ -51,6 +51,16 @@
             color: #666;
             font-style: italic;
         }
+        #debug-info {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -60,17 +70,104 @@
     <div id="file-list">
         <p class="no-files">Loading visualizations...</p>
     </div>
+    
+    <div id="debug-info"></div>
 
     <script>
-        // Function to fetch repository contents
-        async function fetchRepoContents() {
-            const username = window.location.hostname.split('.')[0];
-            const repoName = window.location.pathname.split('/')[1];
+        // Simple method to list files in the current directory
+        async function listFilesLocally() {
+            try {
+                // Make a request to the current directory
+                const response = await fetch('./');
+                const html = await response.text();
+                
+                // Create a temporary element to parse the HTML
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                // Look for links that might be files
+                const links = Array.from(doc.querySelectorAll('a'));
+                
+                // Filter for HTML files only (excluding index.html)
+                const htmlFiles = links
+                    .filter(link => {
+                        const href = link.getAttribute('href');
+                        return href && 
+                               href.endsWith('.html') && 
+                               href !== 'index.html';
+                    })
+                    .map(link => {
+                        return {
+                            name: link.getAttribute('href'),
+                            html_url: link.getAttribute('href')
+                        };
+                    });
+                
+                return htmlFiles;
+            } catch (error) {
+                console.error('Error listing files locally:', error);
+                return [];
+            }
+        }
+        
+        // Function to get the repository details from URL
+        function getRepoDetailsFromUrl() {
+            const hostname = window.location.hostname;
+            const pathname = window.location.pathname;
+            
+            // Debug info
+            const debugInfo = document.getElementById('debug-info');
+            debugInfo.textContent = `Hostname: ${hostname}, Pathname: ${pathname}`;
+            
+            // For github.io domains
+            if (hostname.endsWith('github.io')) {
+                const username = hostname.split('.')[0];
+                
+                // Get the repo name from the first part of the path
+                const pathParts = pathname.split('/').filter(part => part.length > 0);
+                const repoName = pathParts.length > 0 ? pathParts[0] : '';
+                
+                debugInfo.textContent += `\nDetected GitHub Pages: username=${username}, repo=${repoName}`;
+                
+                if (username && repoName) {
+                    return { username, repoName };
+                }
+            }
+            
+            // If we can't determine the details, return null
+            return null;
+        }
+        
+        // Function to fetch repository contents via GitHub API
+        async function fetchRepoContentsViaGitHub() {
+            const repoDetails = getRepoDetailsFromUrl();
+            const debugInfo = document.getElementById('debug-info');
+            
+            if (!repoDetails) {
+                debugInfo.textContent += '\nCould not determine repository details from URL';
+                return [];
+            }
+            
+            const { username, repoName } = repoDetails;
             const apiUrl = `https://api.github.com/repos/${username}/${repoName}/contents`;
+            
+            debugInfo.textContent += `\nFetching from GitHub API: ${apiUrl}`;
             
             try {
                 const response = await fetch(apiUrl);
+                
+                if (!response.ok) {
+                    debugInfo.textContent += `\nGitHub API responded with status: ${response.status}`;
+                    return [];
+                }
+                
                 const data = await response.json();
+                
+                if (!Array.isArray(data)) {
+                    debugInfo.textContent += '\nGitHub API did not return an array';
+                    console.error('GitHub API response:', data);
+                    return [];
+                }
                 
                 // Filter for HTML files only (excluding index.html)
                 const htmlFiles = data.filter(file => 
@@ -78,12 +175,32 @@
                     file.name !== 'index.html'
                 );
                 
-                displayFiles(htmlFiles);
+                debugInfo.textContent += `\nFound ${htmlFiles.length} HTML files via GitHub API`;
+                return htmlFiles;
             } catch (error) {
+                debugInfo.textContent += `\nError fetching from GitHub API: ${error.message}`;
                 console.error('Error fetching repository contents:', error);
-                document.getElementById('file-list').innerHTML = 
-                    `<p class="no-files">Error loading visualizations. Please try again later.</p>`;
+                return [];
             }
+        }
+        
+        // Main function to try multiple methods to list files
+        async function listFiles() {
+            // For debugging purposes
+            const debugInfo = document.getElementById('debug-info');
+            debugInfo.style.display = 'block';  // Make debug info visible
+            
+            // Try GitHub API first
+            let files = await fetchRepoContentsViaGitHub();
+            
+            // If GitHub API fails or returns no files, try local directory listing
+            if (files.length === 0) {
+                debugInfo.textContent += '\nTrying local directory listing as fallback...';
+                files = await listFilesLocally();
+                debugInfo.textContent += `\nFound ${files.length} HTML files via local listing`;
+            }
+            
+            return files;
         }
         
         // Function to display files in the list
@@ -91,7 +208,10 @@
             const fileListElement = document.getElementById('file-list');
             
             if (files.length === 0) {
-                fileListElement.innerHTML = `<p class="no-files">No visualizations found. Upload some HTML files to see them here!</p>`;
+                fileListElement.innerHTML = `
+                    <p class="no-files">No visualizations found. Upload some HTML files to see them here!</p>
+                    <p>Note: If you just uploaded files, it may take a few minutes for them to appear.</p>
+                `;
                 return;
             }
             
@@ -111,7 +231,13 @@
         }
         
         // Run when the page loads
-        window.onload = fetchRepoContents;
+        window.onload = async function() {
+            const files = await listFiles();
+            displayFiles(files);
+            
+            // Hide debug info in production (uncomment this line when everything works)
+            // document.getElementById('debug-info').style.display = 'none';
+        };
     </script>
 </body>
 </html>
